@@ -142,45 +142,44 @@ export default function PlayPage({ params }: Props) {
           <div id="yt-player" className="w-full h-full" />
         </div>
 
-        <div className="flex items-center gap-8 bg-black/50 rounded-lg px-6 py-3 backdrop-blur-sm">
-          <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
-          {!practiceMode && started && !ended && (
-            <span className="px-2 py-0.5 bg-red-600 rounded text-white text-xs font-bold animate-pulse">REC</span>
+        <div className="w-full max-w-2xl bg-black/50 rounded-lg px-6 py-3 backdrop-blur-sm flex flex-col gap-2">
+          <div className="flex items-center gap-8">
+            <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
+            {!practiceMode && started && !ended && (
+              <span className="px-2 py-0.5 bg-red-600 rounded text-white text-xs font-bold animate-pulse">REC</span>
+            )}
+            {practiceMode && started && !ended && (
+              <span className="px-2 py-0.5 bg-gray-600 rounded text-gray-300 text-xs font-bold">PRACTICE</span>
+            )}
+            <HypeGauge hype={hype} visible={playing && !ended} />
+          </div>
+          {started && duration > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-gray-400 text-xs w-10 text-right">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min={0}
+                max={duration}
+                step={0.1}
+                value={currentTime}
+                onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
+              />
+              <span className="text-gray-400 text-xs w-10">{formatTime(duration)}</span>
+            </div>
           )}
-          {practiceMode && started && !ended && (
-            <span className="px-2 py-0.5 bg-gray-600 rounded text-gray-300 text-xs font-bold">PRACTICE</span>
-          )}
-          <HypeGauge hype={hype} visible={playing && !ended} />
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400 text-sm">Speed:</span>
+            {[0.25, 0.5, 0.75, 1.0].map((rate) => (
+              <button key={rate} onClick={() => changeSpeed(rate)} className={`px-3 py-1 rounded text-sm ${speed === rate ? "bg-pink-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
+                {rate === 1.0 ? "1x" : `${rate}x`}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="w-full max-w-2xl min-h-[160px] flex items-center justify-center bg-black/50 rounded-lg backdrop-blur-sm p-6">
           {renderTypingArea()}
-        </div>
-
-        {/* Seek Bar */}
-        {started && duration > 0 && (
-          <div className="w-full max-w-2xl flex items-center gap-3 bg-black/40 rounded-lg px-4 py-2 backdrop-blur-sm">
-            <span className="text-gray-400 text-xs w-10 text-right">{formatTime(currentTime)}</span>
-            <input
-              type="range"
-              min={0}
-              max={duration}
-              step={0.1}
-              value={currentTime}
-              onChange={(e) => handleSeek(parseFloat(e.target.value))}
-              className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
-            />
-            <span className="text-gray-400 text-xs w-10">{formatTime(duration)}</span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 bg-black/40 rounded-lg px-4 py-2 backdrop-blur-sm">
-          <span className="text-gray-400 text-sm">Speed:</span>
-          {[0.25, 0.5, 0.75, 1.0].map((rate) => (
-            <button key={rate} onClick={() => changeSpeed(rate)} className={`px-3 py-1 rounded text-sm ${speed === rate ? "bg-pink-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
-              {rate === 1.0 ? "1x" : `${rate}x`}
-            </button>
-          ))}
         </div>
 
         <p className="text-gray-500 text-xs">
