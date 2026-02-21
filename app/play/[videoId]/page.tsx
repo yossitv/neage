@@ -65,9 +65,10 @@ export default function PlayPage({ params }: Props) {
 
   // Gesture -> Hype recovery + word pass
   const handlePass = useCallback(() => {
+    if (!active) return
     recover()
     passCurrentWord()
-  }, [recover, passCurrentWord])
+  }, [active, recover, passCurrentWord])
 
   const { gesture, status, setVideoElement, setCanvasElement } =
     useGesture(handlePass)
