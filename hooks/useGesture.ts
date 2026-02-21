@@ -12,8 +12,16 @@ const RAISE_THRESHOLD_Y = 0.5
 /** 手首と中指先端のy差分の最低値（手首より十分上にあること） */
 const RAISE_MIN_DIFF = 0.1
 
-/** デバッグ用のランドマーク座標 */
+/** 各手の検出状態 */
+export type HandInfo = {
+  detected: boolean
+  raised: boolean
+}
+
+/** デバッグ用情報 */
 export type DebugInfo = {
+  left: HandInfo
+  right: HandInfo
   wristY: number
   middleTipY: number
   diff: number
@@ -152,6 +160,7 @@ export function useGesture(onPass: () => void) {
 
         const result = landmarkerRef.current?.detectForVideo(v, now)
         const allLandmarks = result?.landmarks ?? []
+        const handedness = result?.handedness ?? []
 
         if (ctx && canvas) {
           ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -173,24 +182,51 @@ export function useGesture(onPass: () => void) {
             }
           }
 
-          // いずれかの手で手上げ判定
+          // 左右の手ごとに検出・手上げ判定
           let anyRaised = false
-          let bestDebug: DebugInfo | null = null
+          const left: HandInfo = { detected: false, raised: false }
+          const right: HandInfo = { detected: false, raised: false }
+          let bestWristY = 0
+          let bestTipY = 0
+          let bestDiff = -Infinity
 
-          for (const landmarks of allLandmarks) {
+          for (let i = 0; i < allLandmarks.length; i++) {
+            const landmarks = allLandmarks[i]
+            // MediaPipeはカメラ視点なので Left=ユーザーの右手、Right=ユーザーの左手
+            const label = handedness[i]?.[0]?.categoryName
+            const isLeft = label === "Right"  // ミラー: MediaPipe Right = ユーザー左手
+            const isRight = label === "Left"  // ミラー: MediaPipe Left = ユーザー右手
+
             const middleTip = landmarks[12]
             const wrist = landmarks[0]
             const diff = wrist.y - middleTip.y
             const raised =
               middleTip.y < RAISE_THRESHOLD_Y && diff > RAISE_MIN_DIFF
 
+            if (isLeft) {
+              left.detected = true
+              left.raised = raised
+            }
+            if (isRight) {
+              right.detected = true
+              right.raised = raised
+            }
+
             if (raised) anyRaised = true
-            if (!bestDebug || diff > bestDebug.diff) {
-              bestDebug = { wristY: wrist.y, middleTipY: middleTip.y, diff }
+            if (diff > bestDiff) {
+              bestWristY = wrist.y
+              bestTipY = middleTip.y
+              bestDiff = diff
             }
           }
 
-          setDebug(bestDebug)
+          setDebug({
+            left,
+            right,
+            wristY: bestWristY,
+            middleTipY: bestTipY,
+            diff: bestDiff,
+          })
 
           if (anyRaised && !hasRaisedRef.current) {
             // 手上げ検出 → pass発火 + Hypeチャージ

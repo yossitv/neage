@@ -9,9 +9,6 @@ type Props = {
   setCanvasElement: (el: HTMLCanvasElement | null) => void
 }
 
-const WIDTH = 320
-const HEIGHT = 240
-
 export function CameraPreview({
   status,
   isRaised,
@@ -28,34 +25,34 @@ export function CameraPreview({
   )
 
   return (
-    <div className="relative" style={{ width: WIDTH, height: HEIGHT }}>
-      {/* video は常にDOMに存在させる（MediaPipeの入力元） */}
+    <div className="fixed inset-0 -z-10">
+      {/* video（非表示、MediaPipeの入力元） */}
       <video
         ref={videoRefCb}
-        className="absolute inset-0 w-full h-full rounded-lg object-cover scale-x-[-1] opacity-0"
+        className="absolute inset-0 w-full h-full object-cover scale-x-[-1] opacity-0"
         playsInline
         muted
       />
+      {/* ボーン描画（全画面背景） */}
       <canvas
         ref={canvasRefCb}
-        width={WIDTH}
-        height={HEIGHT}
-        className="absolute inset-0 w-full h-full rounded-lg scale-x-[-1] bg-gray-800"
+        width={1280}
+        height={720}
+        className="absolute inset-0 w-full h-full object-cover scale-x-[-1] bg-gray-900"
       />
 
-      {/* ステータス表示 */}
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">
+        <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-lg">
           Loading MediaPipe...
         </div>
       )}
       {status === "unavailable" && (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
+        <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-lg">
           Camera unavailable
         </div>
       )}
       {isRaised && (
-        <div className="absolute top-2 right-2 px-2 py-1 bg-green-500 rounded text-xs text-white font-bold">
+        <div className="absolute top-4 right-4 px-3 py-1.5 bg-green-500 rounded text-sm text-white font-bold">
           RAISED
         </div>
       )}

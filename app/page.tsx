@@ -19,11 +19,8 @@ export default function Home() {
     useGesture(handlePass)
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-8 p-8">
-      <h1 className="text-3xl font-bold">音上げ - Gesture & Hype Demo</h1>
-
-      <HypeGauge hype={hype} isRaised={gesture.isRaised} />
-
+    <>
+      {/* 全画面背景としてボーン表示 */}
       <CameraPreview
         status={status}
         isRaised={gesture.isRaised}
@@ -31,37 +28,49 @@ export default function Home() {
         setCanvasElement={setCanvasElement}
       />
 
-      <div className="flex flex-col items-center gap-2 text-sm text-gray-400">
-        <p>Status: <span className="text-white">{status}</span></p>
-        <p>
-          Hand detected:{" "}
-          <span className={gesture.handDetected ? "text-green-400" : "text-red-400"}>
-            {gesture.handDetected ? "Yes" : "No"}
-          </span>
-        </p>
-        <p>
-          Raised:{" "}
-          <span className={gesture.isRaised ? "text-green-400" : "text-gray-500"}>
-            {gesture.isRaised ? "Yes" : "No"}
-          </span>
-        </p>
-        <p>Pass count: {passCount}</p>
+      {/* UI オーバーレイ */}
+      <main className="relative z-10 min-h-screen flex flex-col items-center justify-between p-8">
+        {/* 上部: タイトル + Hype */}
+        <div className="flex flex-col items-center gap-4 pt-4">
+          <h1 className="text-3xl font-bold text-white drop-shadow-lg">
+            音上げ - Gesture & Hype Demo
+          </h1>
+          <HypeGauge hype={hype} isRaised={gesture.isRaised} />
+        </div>
 
-        {debug && (
-          <div className="mt-2 font-mono text-xs text-gray-500 space-y-0.5">
-            <p>wrist.y: {debug.wristY.toFixed(3)}</p>
-            <p>middleTip.y: {debug.middleTipY.toFixed(3)}</p>
-            <p>diff: {debug.diff.toFixed(3)}</p>
+        {/* 下部: ステータス情報 */}
+        <div className="flex flex-col items-center gap-3 pb-8">
+          <div className="flex gap-6 text-sm text-gray-300 bg-black/40 rounded-lg px-6 py-3 backdrop-blur-sm">
+            <p>
+              Left:{" "}
+              <span className={
+                debug?.left.raised ? "text-green-400" :
+                debug?.left.detected ? "text-yellow-400" : "text-red-400"
+              }>
+                {debug?.left.raised ? "Raised" : debug?.left.detected ? "Detected" : "No"}
+              </span>
+            </p>
+            <p>
+              Right:{" "}
+              <span className={
+                debug?.right.raised ? "text-green-400" :
+                debug?.right.detected ? "text-yellow-400" : "text-red-400"
+              }>
+                {debug?.right.raised ? "Raised" : debug?.right.detected ? "Detected" : "No"}
+              </span>
+            </p>
+            <p>
+              Both:{" "}
+              <span className={
+                debug?.left.raised && debug?.right.raised ? "text-green-400" : "text-gray-500"
+              }>
+                {debug?.left.raised && debug?.right.raised ? "Raised" : "No"}
+              </span>
+            </p>
+            <p>Pass: {passCount}</p>
           </div>
-        )}
-      </div>
-
-      <button
-        onClick={resetRaise}
-        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-      >
-        Reset raise (simulate next lyric)
-      </button>
-    </main>
+        </div>
+      </main>
+    </>
   )
 }
