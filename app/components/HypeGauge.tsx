@@ -1,10 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-
 type Props = {
   hype: number
-  isRaised: boolean
 }
 
 function hypeToPercent(hype: number): number {
@@ -17,19 +14,7 @@ function hypeColor(hype: number): string {
   return "bg-red-500"
 }
 
-export function HypeGauge({ hype, isRaised }: Props) {
-  const [flash, setFlash] = useState(false)
-  const prevRaisedRef = useRef(false)
-
-  useEffect(() => {
-    if (isRaised && !prevRaisedRef.current) {
-      setFlash(true)
-      const t = setTimeout(() => setFlash(false), 300)
-      return () => clearTimeout(t)
-    }
-    prevRaisedRef.current = isRaised
-  }, [isRaised])
-
+export function HypeGauge({ hype }: Props) {
   const pct = hypeToPercent(hype)
 
   return (
@@ -38,11 +23,7 @@ export function HypeGauge({ hype, isRaised }: Props) {
         <span className="text-gray-400">HYPE</span>
         <span className="text-pink-400">x{hype.toFixed(1)}</span>
       </div>
-      <div
-        className={`h-4 rounded-full bg-gray-700 overflow-hidden transition-shadow ${
-          flash ? "shadow-[0_0_16px_rgba(236,72,153,0.8)]" : ""
-        }`}
-      >
+      <div className="h-4 rounded-full bg-gray-700 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-150 ${hypeColor(hype)}`}
           style={{ width: `${pct}%` }}

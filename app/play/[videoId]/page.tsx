@@ -133,7 +133,7 @@ export default function PlayPage({ params }: Props) {
 
         <div className="flex items-center gap-8 bg-black/50 rounded-lg px-6 py-3 backdrop-blur-sm">
           <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
-          <HypeGauge hype={hype} isRaised={!ended && gesture.isRaised} />
+          <HypeGauge hype={hype} />
         </div>
 
         <div className="w-full max-w-2xl min-h-[160px] flex items-center justify-center bg-black/50 rounded-lg backdrop-blur-sm p-6">
