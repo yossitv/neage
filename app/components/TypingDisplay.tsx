@@ -45,10 +45,17 @@ export function TypingDisplay({ lyrics, currentIndex, charIndex, active, current
 
       <div className="text-center">
         <p className={`text-2xl text-gray-300 mb-1 transition-opacity duration-300 ${active ? "opacity-100" : "opacity-[0.3]"}`}>{current.text}</p>
-        <p className="text-4xl font-mono tracking-wider relative">
+        <p className="text-4xl font-mono tracking-wider relative text-left">
           {/* waiting時の薄い文字（下レイヤー） */}
           <span className={`transition-opacity duration-300 ${active ? "opacity-0" : "opacity-30"}`}>{current.romaji}</span>
-          {/* active時: 時間経過で左→右へ薄くなるグラデーション */}
+          {/* 入力済み（緑）: マスクなし、常に100% */}
+          <span
+            className="absolute inset-0 transition-[clip-path] duration-500 ease-out"
+            style={{ clipPath: active ? "inset(0 0 0 0)" : "inset(0 100% 0 0)" }}
+          >
+            <span className="text-green-400">{typed}</span>
+          </span>
+          {/* 未入力（白）: 時間経過で左→右へ薄くなる */}
           <span
             className="absolute inset-0 transition-[clip-path] duration-500 ease-out"
             style={{
@@ -61,7 +68,7 @@ export function TypingDisplay({ lyrics, currentIndex, charIndex, active, current
                 : undefined,
             }}
           >
-            <span className="text-green-400">{typed}</span>
+            <span className="invisible">{typed}</span>
             <span className="text-white">{remaining}</span>
           </span>
         </p>
