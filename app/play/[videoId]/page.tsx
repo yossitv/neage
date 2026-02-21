@@ -59,9 +59,9 @@ export default function PlayPage({ params }: Props) {
   // Hype: only active when video is playing
   const { hype, recover } = useHype(playing)
 
-  // Typing Engine: only feed currentTime when playing
-  const { currentIndex, charIndex, score, correctCount, totalCount, passCurrentWord } =
-    useTypingEngine(lyrics, hype, playing ? currentTime : undefined)
+  // Typing Engine: always feed currentTime once started (for active detection)
+  const { currentIndex, charIndex, score, correctCount, totalCount, active, passCurrentWord } =
+    useTypingEngine(lyrics, hype, started ? currentTime : undefined)
 
   // Gesture -> Hype recovery + word pass
   const handlePass = useCallback(() => {
@@ -71,12 +71,6 @@ export default function PlayPage({ params }: Props) {
 
   const { gesture, status, setVideoElement, setCanvasElement } =
     useGesture(handlePass)
-
-  // Gap detection
-  const currentLyric = lyrics[currentIndex]
-  const isInGap =
-    currentLyric &&
-    (currentTime < currentLyric.startTime || currentTime >= currentLyric.endTime)
 
   const changeSpeed = (rate: number) => {
     setSpeed(rate)
@@ -122,9 +116,8 @@ export default function PlayPage({ params }: Props) {
         Start
       </button>
     )
-    // Playing or paused after start
-    if (isInGap || !playing) return <p className="text-gray-500 text-2xl animate-pulse">...</p>
-    return <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} />
+    // Always show TypingDisplay once started (active controls opacity)
+    return <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} active={active} />
   }
 
   return (

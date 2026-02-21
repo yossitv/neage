@@ -12,11 +12,6 @@ type TypingState = {
   wordChars: number
 }
 
-/**
- * @param lyrics - 歌詞配列
- * @param hype - 現在のHype倍率
- * @param currentTime - YouTube動画の再生時間（秒）。渡すと再生時間に連動して行が自動切替される
- */
 export function useTypingEngine(
   lyrics: Lyric[],
   hype: number,
@@ -36,33 +31,44 @@ export function useTypingEngine(
   const hypeRef = useRef(hype)
   hypeRef.current = hype
 
+  const currentTimeRef = useRef(currentTime)
+  currentTimeRef.current = currentTime
+
+  /** 次の有効な（romaji非空の）歌詞インデックスを返す */
+  const findNextValid = useCallback(
+    (fromIndex: number): number => {
+      for (let i = fromIndex + 1; i < lyrics.length; i++) {
+        if (lyrics[i].romaji.trim().length > 0) return i
+      }
+      return fromIndex // no more valid lines
+    },
+    [lyrics]
+  )
+
   // 再生時間に連動して currentIndex を自動更新
+  // ただし、入力完了で先に進んでいる場合はそれを尊重する
   useEffect(() => {
     if (currentTime === undefined || lyrics.length === 0) return
 
-    // 現在時刻に該当する歌詞行を探す（空romajiはスキップ）
     const timeIndex = lyrics.findIndex(
       (l) => currentTime >= l.startTime && currentTime < l.endTime && l.romaji.trim().length > 0
     )
     if (timeIndex === -1) return
 
     setState((s) => {
-      // 同じ行なら何もしない
+      // 入力完了で既に先の行にいる場合（待機中）、時間がその行に追いついたらcharIndexをリセット
+      if (s.currentIndex === timeIndex && s.charIndex === 0) return s
       if (s.currentIndex === timeIndex) return s
-      // 時間で行が進んだ場合、未完了の単語をスコア計算してリセット
+      // 時間が現在行より先に進んだ場合のみ更新
+      if (timeIndex <= s.currentIndex) return s
       const scored =
         s.wordChars > 0
-          ? {
-              ...s,
-              score: s.score + Math.round(s.wordChars * hypeRef.current),
-              wordChars: 0,
-            }
+          ? { ...s, score: s.score + Math.round(s.wordChars * hypeRef.current), wordChars: 0 }
           : s
       return { ...scored, currentIndex: timeIndex, charIndex: 0 }
     })
   }, [currentTime, lyrics])
 
-  /** 単語完了時のスコア加算: 単語文字数 × Hype倍率 */
   const completeWord = useCallback((s: TypingState): TypingState => {
     if (s.wordChars === 0) return s
     return {
@@ -72,14 +78,14 @@ export function useTypingEngine(
     }
   }, [])
 
-  /** 次の行に進む（手動モード用。時間連動時は自動で切り替わる） */
   const advanceLine = useCallback(
     (s: TypingState): TypingState => {
       const scored = completeWord(s)
-      if (scored.currentIndex >= lyrics.length - 1) return scored
-      return { ...scored, currentIndex: scored.currentIndex + 1, charIndex: 0 }
+      const nextIdx = findNextValid(scored.currentIndex)
+      if (nextIdx === scored.currentIndex) return scored // no more lines
+      return { ...scored, currentIndex: nextIdx, charIndex: 0 }
     },
-    [lyrics.length, completeWord]
+    [completeWord, findNextValid]
   )
 
   const skipSpaces = useCallback(
@@ -87,13 +93,13 @@ export function useTypingEngine(
       const romaji = lyrics[s.currentIndex]?.romaji ?? ""
       let ci = s.charIndex
       while (ci < romaji.length && romaji[ci] === " ") ci++
-      // 時間連動モードでは行末でも自動進行しない（時間で進む）
-      if (ci >= romaji.length && currentTime === undefined) {
+      if (ci >= romaji.length) {
+        // Line complete → advance immediately to next line
         return advanceLine({ ...s, charIndex: ci })
       }
       return { ...s, charIndex: ci }
     },
-    [lyrics, advanceLine, currentTime]
+    [lyrics, advanceLine]
   )
 
   const passCurrentWord = useCallback(() => {
@@ -106,9 +112,22 @@ export function useTypingEngine(
     })
   }, [lyrics, skipSpaces])
 
+  // Current line is "active" (typeable) when currentTime >= startTime
+  const currentLyric = lyrics[state.currentIndex]
+  const active =
+    currentTime !== undefined && currentLyric
+      ? currentTime >= currentLyric.startTime
+      : true
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return
+
+      // Block input if current line hasn't started yet
+      const ct = currentTimeRef.current
+      const s = stateRef.current
+      const lyric = lyrics[s.currentIndex]
+      if (ct !== undefined && lyric && ct < lyric.startTime) return
 
       setState((s) => {
         const romaji = lyrics[s.currentIndex]?.romaji
@@ -132,8 +151,8 @@ export function useTypingEngine(
           if (isSpace || isEnd) {
             next = completeWord(next)
           }
-          // 時間連動モードでは行末で自動進行しない
-          if (isEnd && currentTime === undefined) {
+          if (isEnd) {
+            // Line complete → advance to next line immediately
             next = advanceLine(next)
           } else if (isSpace) {
             next = skipSpaces(next)
@@ -147,7 +166,7 @@ export function useTypingEngine(
 
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [lyrics, completeWord, advanceLine, skipSpaces, currentTime])
+  }, [lyrics, completeWord, advanceLine, skipSpaces])
 
-  return { ...state, passCurrentWord }
+  return { ...state, active, passCurrentWord }
 }
