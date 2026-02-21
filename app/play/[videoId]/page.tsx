@@ -50,7 +50,7 @@ export default function PlayPage({ params }: Props) {
   }
 
   // YouTube Player
-  const { ready, playing, currentTime, duration, ended, play, seekTo, setPlaybackRate } =
+  const { ready, playing, currentTime, duration, ended, play, pause, seekTo, setPlaybackRate } =
     useYouTubePlayer(videoId, "yt-player")
 
   // Track "has ever started" to prevent Start button flashing on pause/buffer
@@ -143,18 +143,21 @@ export default function PlayPage({ params }: Props) {
         </div>
 
         <div className="w-full max-w-2xl bg-black/50 rounded-lg px-6 py-3 backdrop-blur-sm flex flex-col gap-2">
-          <div className="flex items-center gap-8">
-            <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
+          <div className="flex items-center gap-4">
             {!practiceMode && started && !ended && (
               <span className="px-2 py-0.5 bg-red-600 rounded text-white text-xs font-bold animate-pulse">REC</span>
             )}
             {practiceMode && started && !ended && (
               <span className="px-2 py-0.5 bg-gray-600 rounded text-gray-300 text-xs font-bold">PRACTICE</span>
             )}
+            <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
             <HypeGauge hype={hype} visible={playing && !ended} />
           </div>
           {started && duration > 0 && (
             <div className="flex items-center gap-3">
+              <button onClick={playing ? pause : play} className="text-white text-lg w-6 text-center">
+                {playing ? "⏸" : "▶"}
+              </button>
               <span className="text-gray-400 text-xs w-10 text-right">{formatTime(currentTime)}</span>
               <input
                 type="range"
