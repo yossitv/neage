@@ -56,11 +56,9 @@ export function useTypingEngine(
     if (timeIndex === -1) return
 
     setState((s) => {
-      // 入力完了で既に先の行にいる場合（待機中）、時間がその行に追いついたらcharIndexをリセット
       if (s.currentIndex === timeIndex && s.charIndex === 0) return s
       if (s.currentIndex === timeIndex) return s
-      // 時間が現在行より先に進んだ場合のみ更新
-      if (timeIndex <= s.currentIndex) return s
+      // 後方シーク: 戻った場合もcharIndexリセットして追従
       const scored =
         s.wordChars > 0
           ? { ...s, score: s.score + Math.round(s.wordChars * hypeRef.current), wordChars: 0 }

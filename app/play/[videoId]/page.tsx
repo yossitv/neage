@@ -24,6 +24,7 @@ export default function PlayPage({ params }: Props) {
   const [lyrics, setLyrics] = useState<Lyric[]>([])
   const [phase, setPhase] = useState<"loading-langs" | "select-lang" | "loading-captions" | "ready" | "error">("loading-langs")
   const [error, setError] = useState("")
+  const [practiceMode, setPracticeMode] = useState(false)
   const startedRef = useRef(false)
 
   // Fetch available languages
@@ -49,7 +50,7 @@ export default function PlayPage({ params }: Props) {
   }
 
   // YouTube Player
-  const { ready, playing, currentTime, ended, play, setPlaybackRate } =
+  const { ready, playing, currentTime, duration, ended, play, seekTo, setPlaybackRate } =
     useYouTubePlayer(videoId, "yt-player")
 
   // Track "has ever started" to prevent Start button flashing on pause/buffer
@@ -64,9 +65,10 @@ export default function PlayPage({ params }: Props) {
   // Hype: decay when playing, charge when both hands raised (stop on ended)
   const { hype } = useHype(playing && !ended, bothRaised && !ended)
 
-  // Typing Engine: feed currentTime only while started and not ended
+  // Typing Engine: practice mode passes hype=0 to disable scoring
+  const effectiveHype = practiceMode ? 0 : hype
   const { currentIndex, charIndex, score, correctCount, totalCount, active, passCurrentWord } =
-    useTypingEngine(lyrics, hype, started && !ended ? currentTime : undefined)
+    useTypingEngine(lyrics, effectiveHype, started && !ended ? currentTime : undefined)
 
   // Wire up pass callback (needs active + passCurrentWord from typing engine)
   handlePassRef.current = () => {
@@ -77,6 +79,11 @@ export default function PlayPage({ params }: Props) {
   const changeSpeed = (rate: number) => {
     setSpeed(rate)
     setPlaybackRate(rate)
+  }
+
+  const handleSeek = (seconds: number) => {
+    if (!practiceMode) setPracticeMode(true)
+    seekTo(seconds)
   }
 
   // Determine what to show in the typing area
@@ -112,14 +119,18 @@ export default function PlayPage({ params }: Props) {
       </div>
     )
     if (!ready) return <p className="text-gray-500">Loading player...</p>
-    // Show Start only if never started yet
     if (!started) return (
       <button onClick={play} className="px-8 py-4 bg-pink-600 hover:bg-pink-500 rounded-lg text-xl font-bold text-white">
         Start
       </button>
     )
-    // Always show TypingDisplay once started (active controls opacity)
     return <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} active={active} currentTime={currentTime} />
+  }
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, "0")}`
   }
 
   return (
@@ -133,12 +144,35 @@ export default function PlayPage({ params }: Props) {
 
         <div className="flex items-center gap-8 bg-black/50 rounded-lg px-6 py-3 backdrop-blur-sm">
           <ScoreDisplay score={score} correctCount={correctCount} totalCount={totalCount} hype={hype} />
+          {!practiceMode && started && !ended && (
+            <span className="px-2 py-0.5 bg-red-600 rounded text-white text-xs font-bold animate-pulse">REC</span>
+          )}
+          {practiceMode && started && !ended && (
+            <span className="px-2 py-0.5 bg-gray-600 rounded text-gray-300 text-xs font-bold">PRACTICE</span>
+          )}
           <HypeGauge hype={hype} visible={playing && !ended} />
         </div>
 
         <div className="w-full max-w-2xl min-h-[160px] flex items-center justify-center bg-black/50 rounded-lg backdrop-blur-sm p-6">
           {renderTypingArea()}
         </div>
+
+        {/* Seek Bar */}
+        {started && duration > 0 && (
+          <div className="w-full max-w-2xl flex items-center gap-3 bg-black/40 rounded-lg px-4 py-2 backdrop-blur-sm">
+            <span className="text-gray-400 text-xs w-10 text-right">{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min={0}
+              max={duration}
+              step={0.1}
+              value={currentTime}
+              onChange={(e) => handleSeek(parseFloat(e.target.value))}
+              className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
+            />
+            <span className="text-gray-400 text-xs w-10">{formatTime(duration)}</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 bg-black/40 rounded-lg px-4 py-2 backdrop-blur-sm">
           <span className="text-gray-400 text-sm">Speed:</span>
@@ -150,7 +184,7 @@ export default function PlayPage({ params }: Props) {
         </div>
 
         <p className="text-gray-500 text-xs">
-          {currentTime.toFixed(1)}s | Line {currentIndex + 1}/{lyrics.length}
+          Line {currentIndex + 1}/{lyrics.length}
         </p>
       </main>
     </>

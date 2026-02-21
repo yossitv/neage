@@ -13,6 +13,7 @@ type PlayerState = {
   ready: boolean
   playing: boolean
   currentTime: number
+  duration: number
   ended: boolean
 }
 
@@ -21,6 +22,7 @@ export function useYouTubePlayer(videoId: string, containerId: string) {
     ready: false,
     playing: false,
     currentTime: 0,
+    duration: 0,
     ended: false,
   })
   const playerRef = useRef<YT.Player | null>(null)
@@ -58,7 +60,8 @@ export function useYouTubePlayer(videoId: string, containerId: string) {
         },
         events: {
           onReady: () => {
-            setState((s) => ({ ...s, ready: true }))
+            const dur = playerRef.current?.getDuration() ?? 0
+            setState((s) => ({ ...s, ready: true, duration: dur }))
           },
           onStateChange: (e: YT.OnStateChangeEvent) => {
             if (e.data === window.YT.PlayerState.PLAYING) {
@@ -91,9 +94,12 @@ export function useYouTubePlayer(videoId: string, containerId: string) {
 
   const play = useCallback(() => playerRef.current?.playVideo(), [])
   const pause = useCallback(() => playerRef.current?.pauseVideo(), [])
+  const seekTo = useCallback((seconds: number) => {
+    playerRef.current?.seekTo(seconds, true)
+  }, [])
   const setPlaybackRate = useCallback((rate: number) => {
     playerRef.current?.setPlaybackRate(rate)
   }, [])
 
-  return { ...state, play, pause, setPlaybackRate }
+  return { ...state, play, pause, seekTo, setPlaybackRate }
 }
