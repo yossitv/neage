@@ -15,7 +15,7 @@ export default function Home() {
     setPassCount((c) => c + 1)
   }, [recover])
 
-  const { gesture, debug, resetRaise, setVideoElement, setCanvasElement } =
+  const { gesture, debug, status, resetRaise, setVideoElement, setCanvasElement } =
     useGesture(handlePass)
 
   return (
@@ -25,13 +25,14 @@ export default function Home() {
       <HypeGauge hype={hype} isRaised={gesture.isRaised} />
 
       <CameraPreview
-        cameraAvailable={gesture.cameraAvailable}
+        status={status}
         isRaised={gesture.isRaised}
         setVideoElement={setVideoElement}
         setCanvasElement={setCanvasElement}
       />
 
       <div className="flex flex-col items-center gap-2 text-sm text-gray-400">
+        <p>Status: <span className="text-white">{status}</span></p>
         <p>
           Hand detected:{" "}
           <span className={gesture.handDetected ? "text-green-400" : "text-red-400"}>
@@ -51,7 +52,6 @@ export default function Home() {
             <p>wrist.y: {debug.wristY.toFixed(3)}</p>
             <p>middleTip.y: {debug.middleTipY.toFixed(3)}</p>
             <p>diff: {debug.diff.toFixed(3)}</p>
-            <p>threshold: middleTip.y &lt; 0.5 && diff &gt; 0.1</p>
           </div>
         )}
       </div>

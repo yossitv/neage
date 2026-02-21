@@ -19,6 +19,8 @@ export type DebugInfo = {
   diff: number
 }
 
+export type GestureStatus = "loading" | "ready" | "unavailable"
+
 export function useGesture(onPass: () => void) {
   const [gesture, setGesture] = useState<GestureState>({
     cameraAvailable: false,
@@ -27,6 +29,7 @@ export function useGesture(onPass: () => void) {
     hasRaisedForCurrent: false,
   })
   const [debug, setDebug] = useState<DebugInfo | null>(null)
+  const [status, setStatus] = useState<GestureStatus>("loading")
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -42,7 +45,6 @@ export function useGesture(onPass: () => void) {
     setGesture((g) => ({ ...g, hasRaisedForCurrent: false }))
   }, [])
 
-  /** videoRefとcanvasRefを外から紐づけるsetter */
   const setVideoElement = useCallback((el: HTMLVideoElement | null) => {
     videoRef.current = el
   }, [])
@@ -55,23 +57,43 @@ export function useGesture(onPass: () => void) {
     let stopped = false
 
     async function init() {
-      // MediaPipe初期化
       const vision = await import("@mediapipe/tasks-vision")
       const { FilesetResolver, HandLandmarker, DrawingUtils } = vision
 
+      // WASM読み込み
       const wasm = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       )
 
-      const landmarker = await HandLandmarker.createFromOptions(wasm, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-          delegate: "GPU",
-        },
-        runningMode: "VIDEO",
-        numHands: 1,
-      })
+      // GPU → CPU フォールバック
+      let landmarker: import("@mediapipe/tasks-vision").HandLandmarker
+      try {
+        landmarker = await HandLandmarker.createFromOptions(wasm, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numHands: 2,
+        })
+      } catch {
+        console.warn("GPU delegate failed, falling back to CPU")
+        landmarker = await HandLandmarker.createFromOptions(wasm, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "CPU",
+          },
+          runningMode: "VIDEO",
+          numHands: 2,
+        })
+      }
+
+      if (stopped) {
+        landmarker.close()
+        return
+      }
       landmarkerRef.current = landmarker
 
       // カメラ取得
@@ -81,6 +103,7 @@ export function useGesture(onPass: () => void) {
           video: { facingMode: "user", width: 320, height: 240 },
         })
       } catch {
+        setStatus("unavailable")
         setGesture((g) => ({ ...g, cameraAvailable: false }))
         return
       }
@@ -90,12 +113,19 @@ export function useGesture(onPass: () => void) {
         return
       }
 
-      setGesture((g) => ({ ...g, cameraAvailable: true }))
-
+      // video要素にストリームを紐付け
       const video = videoRef.current
-      if (!video) return
+      if (!video) {
+        console.error("video element not found in DOM")
+        stream.getTracks().forEach((t) => t.stop())
+        setStatus("unavailable")
+        return
+      }
       video.srcObject = stream
       await video.play()
+
+      setStatus("ready")
+      setGesture((g) => ({ ...g, cameraAvailable: true }))
 
       // 検出ループ
       const canvas = canvasRef.current
@@ -121,40 +151,48 @@ export function useGesture(onPass: () => void) {
         lastTimestamp = now
 
         const result = landmarkerRef.current?.detectForVideo(v, now)
-        const landmarks = result?.landmarks?.[0]
+        const allLandmarks = result?.landmarks ?? []
 
-        // Canvas描画
         if (ctx && canvas) {
           ctx.clearRect(0, 0, canvas.width, canvas.height)
         }
 
-        if (landmarks) {
-          // ランドマーク描画
-          if (drawingUtils && landmarks) {
-            drawingUtils.drawLandmarks(landmarks, {
-              color: "#00FF00",
-              lineWidth: 1,
-            })
-            drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
-              color: "#00CC00",
-              lineWidth: 1,
-            })
+        if (allLandmarks.length > 0) {
+          // 全手のランドマークを描画
+          for (const landmarks of allLandmarks) {
+            if (drawingUtils) {
+              drawingUtils.drawLandmarks(landmarks, {
+                color: "#00FF00",
+                lineWidth: 1,
+              })
+              drawingUtils.drawConnectors(
+                landmarks,
+                HandLandmarker.HAND_CONNECTIONS,
+                { color: "#00CC00", lineWidth: 1 }
+              )
+            }
           }
 
-          // 手上げ判定: 中指先端(12)が画面上半分 かつ 手首より十分上
-          const middleTip = landmarks[12]
-          const wrist = landmarks[0]
-          const diff = wrist.y - middleTip.y
-          const isRaised =
-            middleTip.y < RAISE_THRESHOLD_Y && diff > RAISE_MIN_DIFF
+          // いずれかの手で手上げ判定
+          let anyRaised = false
+          let bestDebug: DebugInfo | null = null
 
-          setDebug({
-            wristY: wrist.y,
-            middleTipY: middleTip.y,
-            diff,
-          })
+          for (const landmarks of allLandmarks) {
+            const middleTip = landmarks[12]
+            const wrist = landmarks[0]
+            const diff = wrist.y - middleTip.y
+            const raised =
+              middleTip.y < RAISE_THRESHOLD_Y && diff > RAISE_MIN_DIFF
 
-          if (isRaised && !hasRaisedRef.current) {
+            if (raised) anyRaised = true
+            if (!bestDebug || diff > bestDebug.diff) {
+              bestDebug = { wristY: wrist.y, middleTipY: middleTip.y, diff }
+            }
+          }
+
+          setDebug(bestDebug)
+
+          if (anyRaised && !hasRaisedRef.current) {
             hasRaisedRef.current = true
             onPassRef.current()
             setGesture((g) => ({
@@ -167,10 +205,11 @@ export function useGesture(onPass: () => void) {
             setGesture((g) => ({
               ...g,
               handDetected: true,
-              isRaised,
+              isRaised: anyRaised,
             }))
           }
         } else {
+          setDebug(null)
           setGesture((g) => ({
             ...g,
             handDetected: false,
@@ -184,7 +223,10 @@ export function useGesture(onPass: () => void) {
       rafRef.current = requestAnimationFrame(detect)
     }
 
-    init()
+    init().catch((err) => {
+      console.error("useGesture init failed:", err)
+      setStatus("unavailable")
+    })
 
     return () => {
       stopped = true
@@ -199,5 +241,5 @@ export function useGesture(onPass: () => void) {
     }
   }, [])
 
-  return { gesture, debug, resetRaise, setVideoElement, setCanvasElement }
+  return { gesture, debug, status, resetRaise, setVideoElement, setCanvasElement }
 }
