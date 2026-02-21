@@ -20,12 +20,19 @@ type Props = {
 export default function PlayPage({ params }: Props) {
   const { videoId } = use(params)
   const [speed, setSpeed] = useState(1.0)
+  const [slowest, setSlowest] = useState(1.0)
   const [langs, setLangs] = useState<LangOption[]>([])
   const [lyrics, setLyrics] = useState<Lyric[]>([])
   const [phase, setPhase] = useState<"loading-langs" | "select-lang" | "loading-captions" | "ready" | "error">("loading-langs")
   const [error, setError] = useState("")
   const [practiceMode, setPracticeMode] = useState(false)
   const startedRef = useRef(false)
+
+  // Load cached slowest speed
+  useEffect(() => {
+    const cached = localStorage.getItem(`slowest-speed-${videoId}`)
+    if (cached) setSlowest(parseFloat(cached))
+  }, [videoId])
 
   // Fetch available languages
   useEffect(() => {
@@ -79,6 +86,10 @@ export default function PlayPage({ params }: Props) {
   const changeSpeed = (rate: number) => {
     setSpeed(rate)
     setPlaybackRate(rate)
+    if (rate < slowest) {
+      setSlowest(rate)
+      localStorage.setItem(`slowest-speed-${videoId}`, String(rate))
+    }
   }
 
   const handleSeek = (seconds: number) => {
@@ -178,7 +189,7 @@ export default function PlayPage({ params }: Props) {
                 {rate === 1.0 ? "1x" : `${rate}x`}
               </button>
             ))}
-            <span className="text-pink-400 text-sm font-bold ml-2">{speed === 1.0 ? "1x" : `${speed}x`}</span>
+            <span className="text-pink-400 text-sm font-bold ml-2">{slowest === 1.0 ? "1x" : `${slowest}x`}</span>
           </div>
         </div>
 
