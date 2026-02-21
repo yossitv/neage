@@ -3,8 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { GestureState } from "@/app/types"
 
-/** 手上げ判定の閾値: 中指先端のy座標が画面上部1/3以内 */
-const RAISE_THRESHOLD_Y = 0.33
+/**
+ * 手上げ判定の閾値: 中指先端のy座標がこの値未満なら「上げている」
+ * MediaPipe座標は 0(上端) ~ 1(下端) なので 0.5 = 画面上半分
+ */
+const RAISE_THRESHOLD_Y = 0.5
+
+/** 手首と中指先端のy差分の最低値（手首より十分上にあること） */
+const RAISE_MIN_DIFF = 0.1
+
+/** デバッグ用のランドマーク座標 */
+export type DebugInfo = {
+  wristY: number
+  middleTipY: number
+  diff: number
+}
 
 export function useGesture(onPass: () => void) {
   const [gesture, setGesture] = useState<GestureState>({
@@ -13,6 +26,7 @@ export function useGesture(onPass: () => void) {
     isRaised: false,
     hasRaisedForCurrent: false,
   })
+  const [debug, setDebug] = useState<DebugInfo | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -127,10 +141,18 @@ export function useGesture(onPass: () => void) {
             })
           }
 
-          // 手上げ判定: 中指先端(12)のy座標が閾値未満
+          // 手上げ判定: 中指先端(12)が画面上半分 かつ 手首より十分上
           const middleTip = landmarks[12]
           const wrist = landmarks[0]
-          const isRaised = middleTip.y < RAISE_THRESHOLD_Y && middleTip.y < wrist.y
+          const diff = wrist.y - middleTip.y
+          const isRaised =
+            middleTip.y < RAISE_THRESHOLD_Y && diff > RAISE_MIN_DIFF
+
+          setDebug({
+            wristY: wrist.y,
+            middleTipY: middleTip.y,
+            diff,
+          })
 
           if (isRaised && !hasRaisedRef.current) {
             hasRaisedRef.current = true
@@ -177,5 +199,5 @@ export function useGesture(onPass: () => void) {
     }
   }, [])
 
-  return { gesture, resetRaise, setVideoElement, setCanvasElement }
+  return { gesture, debug, resetRaise, setVideoElement, setCanvasElement }
 }

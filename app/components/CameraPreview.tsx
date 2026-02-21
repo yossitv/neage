@@ -40,17 +40,19 @@ export function CameraPreview({
 
   return (
     <div className="relative" style={{ width: WIDTH, height: HEIGHT }}>
+      {/* カメラ映像は非表示（MediaPipeの入力用のみ） */}
       <video
         ref={videoRefCb}
-        className="absolute inset-0 w-full h-full rounded-lg object-cover scale-x-[-1]"
+        className="absolute inset-0 w-full h-full rounded-lg object-cover scale-x-[-1] invisible"
         playsInline
         muted
       />
+      {/* ボーン（骨格ランドマーク）のみ表示 */}
       <canvas
         ref={canvasRefCb}
         width={WIDTH}
         height={HEIGHT}
-        className="absolute inset-0 w-full h-full rounded-lg scale-x-[-1]"
+        className="absolute inset-0 w-full h-full rounded-lg scale-x-[-1] bg-gray-800"
       />
       {isRaised && (
         <div className="absolute top-2 right-2 px-2 py-1 bg-green-500 rounded text-xs text-white font-bold">

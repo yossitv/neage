@@ -15,7 +15,7 @@ export default function Home() {
     setPassCount((c) => c + 1)
   }, [recover])
 
-  const { gesture, resetRaise, setVideoElement, setCanvasElement } =
+  const { gesture, debug, resetRaise, setVideoElement, setCanvasElement } =
     useGesture(handlePass)
 
   return (
@@ -45,6 +45,15 @@ export default function Home() {
           </span>
         </p>
         <p>Pass count: {passCount}</p>
+
+        {debug && (
+          <div className="mt-2 font-mono text-xs text-gray-500 space-y-0.5">
+            <p>wrist.y: {debug.wristY.toFixed(3)}</p>
+            <p>middleTip.y: {debug.middleTipY.toFixed(3)}</p>
+            <p>diff: {debug.diff.toFixed(3)}</p>
+            <p>threshold: middleTip.y &lt; 0.5 && diff &gt; 0.1</p>
+          </div>
+        )}
       </div>
 
       <button
