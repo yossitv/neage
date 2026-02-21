@@ -28,12 +28,6 @@ export default function PlayPage({ params }: Props) {
   const [practiceMode, setPracticeMode] = useState(false)
   const startedRef = useRef(false)
 
-  // Load cached slowest speed
-  useEffect(() => {
-    const cached = localStorage.getItem(`slowest-speed-${videoId}`)
-    if (cached) setSlowest(parseFloat(cached))
-  }, [videoId])
-
   // Fetch available languages
   useEffect(() => {
     fetch(`/api/captions?v=${videoId}`)
@@ -86,10 +80,7 @@ export default function PlayPage({ params }: Props) {
   const changeSpeed = (rate: number) => {
     setSpeed(rate)
     setPlaybackRate(rate)
-    if (rate < slowest) {
-      setSlowest(rate)
-      localStorage.setItem(`slowest-speed-${videoId}`, String(rate))
-    }
+    if (rate < slowest) setSlowest(rate)
   }
 
   const handleSeek = (seconds: number) => {
