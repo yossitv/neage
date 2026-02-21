@@ -40,9 +40,9 @@ export function useTypingEngine(
   useEffect(() => {
     if (currentTime === undefined || lyrics.length === 0) return
 
-    // 現在時刻に該当する歌詞行を探す
+    // 現在時刻に該当する歌詞行を探す（空romajiはスキップ）
     const timeIndex = lyrics.findIndex(
-      (l) => currentTime >= l.startTime && currentTime < l.endTime
+      (l) => currentTime >= l.startTime && currentTime < l.endTime && l.romaji.trim().length > 0
     )
     if (timeIndex === -1) return
 

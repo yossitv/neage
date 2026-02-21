@@ -20,14 +20,13 @@ export function TypingDisplay({ lyrics, currentIndex, charIndex }: Props) {
 
   return (
     <div className="flex flex-col items-center gap-5 w-full">
-      {/* 現在行 */}
-      <div className="text-center">
-        <p className="text-2xl text-gray-300 mb-1">{current.text}</p>
-        <p className="text-4xl font-mono tracking-wider">
-          <span className="text-green-400">{typed}</span>
-          <span className="text-white">{remaining}</span>
-        </p>
-      </div>
+      {/* 次の次行 (top, most faded) */}
+      {next2 && (
+        <div className="text-center opacity-30">
+          <p className="text-base text-gray-500">{next2.text}</p>
+          <p className="text-xs font-mono text-gray-600">{next2.romaji}</p>
+        </div>
+      )}
 
       {/* 次行 */}
       {next && (
@@ -37,13 +36,14 @@ export function TypingDisplay({ lyrics, currentIndex, charIndex }: Props) {
         </div>
       )}
 
-      {/* 次の次行 */}
-      {next2 && (
-        <div className="text-center opacity-30">
-          <p className="text-base text-gray-500">{next2.text}</p>
-          <p className="text-xs font-mono text-gray-600">{next2.romaji}</p>
-        </div>
-      )}
+      {/* 現在行 (bottom, typing target) */}
+      <div className="text-center">
+        <p className="text-2xl text-gray-300 mb-1">{current.text}</p>
+        <p className="text-4xl font-mono tracking-wider">
+          <span className="text-green-400">{typed}</span>
+          <span className="text-white">{remaining}</span>
+        </p>
+      </div>
     </div>
   )
 }
