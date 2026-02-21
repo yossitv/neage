@@ -19,7 +19,7 @@ type Props = {
 
 export default function PlayPage({ params }: Props) {
   const { videoId } = use(params)
-  const [selectedSpeeds, setSelectedSpeeds] = useState<Set<number>>(new Set([1.0]))
+  const [speed, setSpeed] = useState(1.0)
   const [langs, setLangs] = useState<LangOption[]>([])
   const [lyrics, setLyrics] = useState<Lyric[]>([])
   const [phase, setPhase] = useState<"loading-langs" | "select-lang" | "loading-captions" | "ready" | "error">("loading-langs")
@@ -76,20 +76,10 @@ export default function PlayPage({ params }: Props) {
     passCurrentWord()
   }
 
-  const toggleSpeed = (rate: number) => {
-    setSelectedSpeeds((prev) => {
-      const next = new Set(prev)
-      if (next.has(rate)) {
-        if (next.size > 1) next.delete(rate)
-      } else {
-        next.add(rate)
-      }
-      const slowest = Math.min(...next)
-      setPlaybackRate(slowest)
-      return next
-    })
+  const changeSpeed = (rate: number) => {
+    setSpeed(rate)
+    setPlaybackRate(rate)
   }
-  const activeSpeed = Math.min(...selectedSpeeds)
 
   const handleSeek = (seconds: number) => {
     if (!practiceMode) setPracticeMode(true)
@@ -184,11 +174,11 @@ export default function PlayPage({ params }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-gray-400 text-sm">Speed:</span>
             {[0.25, 0.5, 0.75, 1.0].map((rate) => (
-              <button key={rate} onClick={() => toggleSpeed(rate)} className={`px-3 py-1 rounded text-sm ${selectedSpeeds.has(rate) ? "bg-pink-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
+              <button key={rate} onClick={() => changeSpeed(rate)} className={`px-3 py-1 rounded text-sm ${speed === rate ? "bg-pink-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}>
                 {rate === 1.0 ? "1x" : `${rate}x`}
               </button>
             ))}
-            <span className="text-pink-400 text-sm font-bold ml-2">{activeSpeed === 1.0 ? "1x" : `${activeSpeed}x`}</span>
+            <span className="text-pink-400 text-sm font-bold ml-2">{speed === 1.0 ? "1x" : `${speed}x`}</span>
           </div>
         </div>
 
