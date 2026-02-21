@@ -2,6 +2,7 @@
 
 type Props = {
   hype: number
+  visible: boolean
 }
 
 function hypeToPercent(hype: number): number {
@@ -14,7 +15,8 @@ function hypeColor(hype: number): string {
   return "bg-red-500"
 }
 
-export function HypeGauge({ hype }: Props) {
+export function HypeGauge({ hype, visible }: Props) {
+  if (!visible) return null
   const pct = hypeToPercent(hype)
 
   return (
