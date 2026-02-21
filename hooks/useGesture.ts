@@ -193,6 +193,7 @@ export function useGesture(onPass: () => void) {
           setDebug(bestDebug)
 
           if (anyRaised && !hasRaisedRef.current) {
+            // 手上げ検出 → pass発火 + Hypeチャージ
             hasRaisedRef.current = true
             onPassRef.current()
             setGesture((g) => ({
@@ -200,6 +201,14 @@ export function useGesture(onPass: () => void) {
               handDetected: true,
               isRaised: true,
               hasRaisedForCurrent: true,
+            }))
+          } else if (!anyRaised && hasRaisedRef.current) {
+            // 手を下ろした → リセット（再度上げたらまたチャージ可能）
+            hasRaisedRef.current = false
+            setGesture((g) => ({
+              ...g,
+              handDetected: true,
+              isRaised: false,
             }))
           } else {
             setGesture((g) => ({
