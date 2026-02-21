@@ -155,7 +155,7 @@ export default function PlayPage({ params }: Props) {
           </div>
           {started && duration > 0 && (
             <div className="flex items-center gap-3">
-              <button onClick={playing ? pause : play} className="text-white text-lg w-6 text-center">
+              <button onClick={playing ? pause : play} className="text-white text-lg w-6 h-6 flex items-center justify-center shrink-0">
                 {playing ? "⏸" : "▶"}
               </button>
               <span className="text-gray-400 text-xs w-10 text-right">{formatTime(currentTime)}</span>
