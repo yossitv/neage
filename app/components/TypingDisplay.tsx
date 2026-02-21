@@ -35,12 +35,20 @@ export function TypingDisplay({ lyrics, currentIndex, charIndex, active }: Props
         </div>
       )}
 
-      {/* 現在行: active=100%, waiting=80% */}
-      <div className={`text-center transition-opacity duration-300 ${active ? "opacity-100" : "opacity-[0.3]"}`}>
-        <p className="text-2xl text-gray-300 mb-1">{current.text}</p>
-        <p className="text-4xl font-mono tracking-wider">
-          <span className="text-green-400">{typed}</span>
-          <span className="text-white">{remaining}</span>
+      {/* 現在行: active時に左→右へ流れるように表示 */}
+      <div className="text-center">
+        <p className={`text-2xl text-gray-300 mb-1 transition-opacity duration-300 ${active ? "opacity-100" : "opacity-[0.3]"}`}>{current.text}</p>
+        <p className="text-4xl font-mono tracking-wider relative">
+          {/* waiting時の薄い文字（下レイヤー） */}
+          <span className={`transition-opacity duration-300 ${active ? "opacity-0" : "opacity-30"}`}>{current.romaji}</span>
+          {/* active時に左→右へrevealされる文字（上レイヤー） */}
+          <span
+            className="absolute inset-0 transition-[clip-path] duration-500 ease-out"
+            style={{ clipPath: active ? "inset(0 0 0 0)" : "inset(0 100% 0 0)" }}
+          >
+            <span className="text-green-400">{typed}</span>
+            <span className="text-white">{remaining}</span>
+          </span>
         </p>
       </div>
     </div>
