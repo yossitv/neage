@@ -28,15 +28,17 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  // Try Gemini first, fallback to local processing
   const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "GEMINI_API_KEY not configured" },
-      { status: 500 }
-    )
-  }
+  let lyrics: Lyric[] | null = null
 
-  const lyrics = await parseWithGemini(apiKey, captions)
+  if (apiKey) {
+    lyrics = await parseWithGemini(apiKey, captions)
+  }
+  if (!lyrics) {
+    console.log("Using local caption processing (Gemini unavailable)")
+    lyrics = parseLocally(captions)
+  }
   if (!lyrics) {
     return NextResponse.json(
       { error: "Failed to parse captions" },
@@ -204,6 +206,32 @@ function decodeXml(s: string): string {
     .replace(/&apos;/g, "'")
     .replace(/\n/g, " ")
     .trim()
+}
+
+// --- Local Fallback Parse ---
+
+const NOISE = /^\[.*\]$|^\(.*\)$/
+
+function parseLocally(captions: RawCaption[]): Lyric[] | null {
+  const lyrics: Lyric[] = []
+  for (const c of captions) {
+    const text = c.text.trim()
+    if (!text || NOISE.test(text)) continue
+    // Lowercase + strip non-typing chars for romaji
+    const romaji = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s',.-]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (!romaji) continue
+    lyrics.push({
+      text,
+      romaji,
+      startTime: c.start,
+      endTime: c.start + c.dur,
+    })
+  }
+  return lyrics.length > 0 ? lyrics : null
 }
 
 // --- Gemini Parse ---
