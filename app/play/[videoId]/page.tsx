@@ -119,7 +119,7 @@ export default function PlayPage({ params }: Props) {
       </button>
     )
     // Always show TypingDisplay once started (active controls opacity)
-    return <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} active={active} />
+    return <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} active={active} currentTime={currentTime} />
   }
 
   return (
