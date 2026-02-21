@@ -36,6 +36,7 @@ export function useGesture(onPass: () => void) {
     isRaised: false,
     hasRaisedForCurrent: false,
   })
+  const [bothRaised, setBothRaised] = useState(false)
   const [debug, setDebug] = useState<DebugInfo | null>(null)
   const [status, setStatus] = useState<GestureStatus>("loading")
 
@@ -228,8 +229,12 @@ export function useGesture(onPass: () => void) {
             diff: bestDiff,
           })
 
-          if (anyRaised && !hasRaisedRef.current) {
-            // 手上げ検出 → pass発火 + Hypeチャージ
+          const isBoth = left.raised && right.raised
+          const oneHandOnly = anyRaised && !isBoth
+          setBothRaised(isBoth)
+
+          // 片手だけ上げた → 単語パス（単発）
+          if (oneHandOnly && !hasRaisedRef.current) {
             hasRaisedRef.current = true
             onPassRef.current()
             setGesture((g) => ({
@@ -239,7 +244,6 @@ export function useGesture(onPass: () => void) {
               hasRaisedForCurrent: true,
             }))
           } else if (!anyRaised && hasRaisedRef.current) {
-            // 手を下ろした → リセット（再度上げたらまたチャージ可能）
             hasRaisedRef.current = false
             setGesture((g) => ({
               ...g,
@@ -255,6 +259,7 @@ export function useGesture(onPass: () => void) {
           }
         } else {
           setDebug(null)
+          setBothRaised(false)
           setGesture((g) => ({
             ...g,
             handDetected: false,
@@ -286,5 +291,5 @@ export function useGesture(onPass: () => void) {
     }
   }, [])
 
-  return { gesture, debug, status, resetRaise, setVideoElement, setCanvasElement }
+  return { gesture, bothRaised, debug, status, resetRaise, setVideoElement, setCanvasElement }
 }

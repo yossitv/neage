@@ -56,22 +56,23 @@ export default function PlayPage({ params }: Props) {
   if (playing && !startedRef.current) startedRef.current = true
   const started = startedRef.current
 
-  // Hype: only active when video is playing
-  const { hype, recover } = useHype(playing)
+  // Gesture: bothRaised is continuous state for hype charging
+  const handlePassRef = useRef<() => void>(() => {})
+  const { gesture, bothRaised, status, setVideoElement, setCanvasElement } =
+    useGesture(useCallback(() => handlePassRef.current(), []))
 
-  // Typing Engine: always feed currentTime once started (for active detection)
+  // Hype: decay when playing, charge when both hands raised (works anytime)
+  const { hype } = useHype(playing && !ended, bothRaised)
+
+  // Typing Engine: feed currentTime only while started and not ended
   const { currentIndex, charIndex, score, correctCount, totalCount, active, passCurrentWord } =
-    useTypingEngine(lyrics, hype, started ? currentTime : undefined)
+    useTypingEngine(lyrics, hype, started && !ended ? currentTime : undefined)
 
-  // Gesture -> Hype recovery + word pass
-  const handlePass = useCallback(() => {
+  // Wire up pass callback (needs active + passCurrentWord from typing engine)
+  handlePassRef.current = () => {
     if (!active) return
-    recover()
     passCurrentWord()
-  }, [active, recover, passCurrentWord])
-
-  const { gesture, status, setVideoElement, setCanvasElement } =
-    useGesture(handlePass)
+  }
 
   const changeSpeed = (rate: number) => {
     setSpeed(rate)
