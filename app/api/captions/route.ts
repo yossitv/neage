@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
+import { execFile } from "child_process"
+import { promisify } from "util"
+import { readFile, writeFile, unlink, mkdir } from "fs/promises"
+import { tmpdir } from "os"
+import { join } from "path"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import type { Lyric } from "@/app/types"
 
+const execFileAsync = promisify(execFile)
+const CACHE_DIR = join(process.cwd(), ".cache", "captions")
+
 export async function GET(req: NextRequest) {
   const videoId = req.nextUrl.searchParams.get("v")
-  if (!videoId) {
-    return NextResponse.json({ error: "Missing ?v= parameter" }, { status: 400 })
+  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return NextResponse.json({ error: "Invalid video ID" }, { status: 400 })
   }
 
-  // 1. Fetch YouTube page to extract caption track URL
+  // Check cache first
+  const cached = await loadCache(videoId)
+  if (cached) return NextResponse.json(cached)
+
   const captions = await fetchCaptions(videoId)
   if (!captions) {
     return NextResponse.json(
@@ -17,7 +28,6 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // 2. Send to Gemini for cleanup + romaji conversion
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     return NextResponse.json(
@@ -29,69 +39,163 @@ export async function GET(req: NextRequest) {
   const lyrics = await parseWithGemini(apiKey, captions)
   if (!lyrics) {
     return NextResponse.json(
-      { error: "Failed to parse captions with Gemini" },
+      { error: "Failed to parse captions" },
       { status: 500 }
     )
   }
 
+  // Save to cache
+  await saveCache(videoId, lyrics)
+
   return NextResponse.json(lyrics)
 }
 
-type RawCaption = { start: number; dur: number; text: string }
+// --- Cache ---
 
-async function fetchCaptions(videoId: string): Promise<RawCaption[] | null> {
+async function loadCache(videoId: string): Promise<Lyric[] | null> {
   try {
-    // Fetch YouTube watch page to extract player response
-    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    })
-    const html = await res.text()
-
-    // Extract ytInitialPlayerResponse
-    const match = html.match(
-      /ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\});(?:\s*var\s|\s*<\/script>)/
-    )
-    if (!match) return null
-
-    const playerResponse = JSON.parse(match[1])
-    const captionTracks =
-      playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks
-    if (!captionTracks || captionTracks.length === 0) return null
-
-    // Prefer English, then first available
-    const track =
-      captionTracks.find((t: { languageCode: string }) => t.languageCode === "en") ??
-      captionTracks[0]
-    const captionUrl = track.baseUrl
-
-    // Fetch the actual captions XML
-    const captionRes = await fetch(captionUrl)
-    const xml = await captionRes.text()
-
-    // Parse XML: <text start="1.23" dur="4.56">content</text>
-    const entries: RawCaption[] = []
-    const regex = /<text\s+start="([^"]+)"\s+dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g
-    let m
-    while ((m = regex.exec(xml)) !== null) {
-      entries.push({
-        start: parseFloat(m[1]),
-        dur: parseFloat(m[2]),
-        text: decodeXmlEntities(m[3].replace(/<[^>]+>/g, "").trim()),
-      })
-    }
-    return entries.length > 0 ? entries : null
-  } catch (e) {
-    console.error("fetchCaptions error:", e)
+    const data = await readFile(join(CACHE_DIR, `${videoId}.json`), "utf-8")
+    return JSON.parse(data) as Lyric[]
+  } catch {
     return null
   }
 }
 
-function decodeXmlEntities(s: string): string {
+async function saveCache(videoId: string, lyrics: Lyric[]): Promise<void> {
+  try {
+    await mkdir(CACHE_DIR, { recursive: true })
+    await writeFile(
+      join(CACHE_DIR, `${videoId}.json`),
+      JSON.stringify(lyrics, null, 2)
+    )
+  } catch (e) {
+    console.error("cache write error:", e)
+  }
+}
+
+// --- Caption Fetch ---
+
+type RawCaption = { start: number; dur: number; text: string }
+
+async function fetchCaptions(videoId: string): Promise<RawCaption[] | null> {
+  // Strategy 1: innertube ANDROID API
+  const innertube = await fetchViaInnertube(videoId)
+  if (innertube) return innertube
+
+  // Strategy 2: yt-dlp subprocess fallback
+  return fetchViaYtDlp(videoId)
+}
+
+async function fetchViaInnertube(videoId: string): Promise<RawCaption[] | null> {
+  try {
+    const res = await fetch(
+      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId,
+          context: {
+            client: {
+              clientName: "ANDROID",
+              clientVersion: "19.09.37",
+              androidSdkVersion: 30,
+              hl: "en",
+            },
+          },
+        }),
+      }
+    )
+    const data = await res.json()
+    const tracks =
+      data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
+    if (!tracks || tracks.length === 0) return null
+
+    const track =
+      tracks.find((t: { languageCode: string }) => t.languageCode === "en") ??
+      tracks.find((t: { languageCode: string }) => t.languageCode === "ja") ??
+      tracks[0]
+
+    // Auto-generated subs return format 3 by default
+    const capRes = await fetch(track.baseUrl)
+    const xml = await capRes.text()
+    if (!xml || xml.length === 0) return null
+
+    // Try format 3 first (<p t="ms" d="ms">), then srv1 (<text start="" dur="">)
+    return parseFormat3Xml(xml) ?? parseSrv1Xml(xml)
+  } catch (e) {
+    console.error("innertube error:", e)
+    return null
+  }
+}
+
+async function fetchViaYtDlp(videoId: string): Promise<RawCaption[] | null> {
+  const outPath = join(tmpdir(), `neage-${videoId}`)
+  try {
+    await execFileAsync("yt-dlp", [
+      "--write-auto-sub",
+      "--sub-lang", "ja,en",
+      "--sub-format", "srv1",
+      "--skip-download",
+      "-o", outPath,
+      `https://www.youtube.com/watch?v=${videoId}`,
+    ], { timeout: 30000 })
+
+    for (const lang of ["ja", "en"]) {
+      const file = `${outPath}.${lang}.srv1`
+      try {
+        const xml = await readFile(file, "utf-8")
+        await unlink(file).catch(() => {})
+        const parsed = parseSrv1Xml(xml)
+        if (parsed) return parsed
+      } catch {
+        // file doesn't exist
+      }
+    }
+    return null
+  } catch (e) {
+    console.error("yt-dlp error:", e)
+    return null
+  } finally {
+    for (const lang of ["ja", "en"]) {
+      await unlink(`${outPath}.${lang}.srv1`).catch(() => {})
+    }
+  }
+}
+
+// --- XML Parsers ---
+
+function parseSrv1Xml(xml: string): RawCaption[] | null {
+  const entries: RawCaption[] = []
+  const regex = /<text\s+start="([^"]+)"\s+dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g
+  let m
+  while ((m = regex.exec(xml)) !== null) {
+    const text = decodeXml(m[3])
+    if (text) entries.push({ start: parseFloat(m[1]), dur: parseFloat(m[2]), text })
+  }
+  return entries.length > 0 ? entries : null
+}
+
+function parseFormat3Xml(xml: string): RawCaption[] | null {
+  const entries: RawCaption[] = []
+  const regex = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g
+  let m
+  while ((m = regex.exec(xml)) !== null) {
+    const text = decodeXml(m[3])
+    if (text) {
+      entries.push({
+        start: parseInt(m[1]) / 1000,
+        dur: parseInt(m[2]) / 1000,
+        text,
+      })
+    }
+  }
+  return entries.length > 0 ? entries : null
+}
+
+function decodeXml(s: string): string {
   return s
+    .replace(/<[^>]+>/g, "")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
@@ -99,7 +203,10 @@ function decodeXmlEntities(s: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/\n/g, " ")
+    .trim()
 }
+
+// --- Gemini Parse ---
 
 async function parseWithGemini(
   apiKey: string,
@@ -126,7 +233,7 @@ Convert them into a JSON array for a typing game. Each element must have:
 Rules:
 - Merge very short consecutive captions (< 0.5s) into one line if they form a single phrase
 - Split very long lines (> 60 chars) into multiple entries with proportional timing
-- Remove empty lines, pure instrumental markers like "[Music]", "(applause)", etc.
+- Remove empty lines, pure instrumental markers like "[Music]", "[Musik]", "(applause)", etc.
 - Keep the timing accurate
 - For romaji field: only use a-z, 0-9, spaces, apostrophes, commas, hyphens, periods
 
@@ -135,7 +242,6 @@ Return ONLY the JSON array, no markdown fences, no explanation.`
   try {
     const result = await model.generateContent(prompt)
     const text = result.response.text().trim()
-    // Strip markdown fences if present
     const clean = text.replace(/^```json?\n?/i, "").replace(/\n?```$/i, "")
     const parsed = JSON.parse(clean) as Lyric[]
     return parsed.length > 0 ? parsed : null

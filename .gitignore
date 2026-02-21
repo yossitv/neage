@@ -39,6 +39,9 @@ yarn-error.log*
 # worktrees
 worktree/
 
+# caption cache
+.cache/
+
 # dev agents
 .assistants
 .claude
