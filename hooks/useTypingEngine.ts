@@ -114,7 +114,7 @@ export function useTypingEngine(
 
   // Current line is "active" (typeable) 0.1s before startTime
   const currentLyric = lyrics[state.currentIndex]
-  const ACTIVE_OFFSET = 0.1
+  const ACTIVE_OFFSET = 0.2
   const active =
     currentTime !== undefined && currentLyric
       ? currentTime >= currentLyric.startTime - ACTIVE_OFFSET
