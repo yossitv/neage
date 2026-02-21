@@ -61,8 +61,8 @@ export default function PlayPage({ params }: Props) {
   const { gesture, bothRaised, status, setVideoElement, setCanvasElement } =
     useGesture(useCallback(() => handlePassRef.current(), []))
 
-  // Hype: decay when playing, charge when both hands raised (works anytime)
-  const { hype } = useHype(playing && !ended, bothRaised)
+  // Hype: decay when playing, charge when both hands raised (stop on ended)
+  const { hype } = useHype(playing && !ended, bothRaised && !ended)
 
   // Typing Engine: feed currentTime only while started and not ended
   const { currentIndex, charIndex, score, correctCount, totalCount, active, passCurrentWord } =
