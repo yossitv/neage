@@ -11,27 +11,38 @@ type Props = {
 export function TypingDisplay({ lyrics, currentIndex, charIndex }: Props) {
   const current = lyrics[currentIndex]
   const next = lyrics[currentIndex + 1]
+  const next2 = lyrics[currentIndex + 2]
 
   if (!current) return null
 
-  const romaji = current.romaji
-  const typed = romaji.slice(0, charIndex)
-  const remaining = romaji.slice(charIndex)
+  const typed = current.romaji.slice(0, charIndex)
+  const remaining = current.romaji.slice(charIndex)
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* 元テキスト（日本語） */}
-      <p className="text-2xl text-gray-300">{current.text}</p>
+    <div className="flex flex-col items-center gap-5 w-full">
+      {/* 現在行 */}
+      <div className="text-center">
+        <p className="text-2xl text-gray-300 mb-1">{current.text}</p>
+        <p className="text-4xl font-mono tracking-wider">
+          <span className="text-green-400">{typed}</span>
+          <span className="text-white">{remaining}</span>
+        </p>
+      </div>
 
-      {/* ローマ字 タイピングエリア */}
-      <p className="text-4xl font-mono tracking-wider">
-        <span className="text-green-400">{typed}</span>
-        <span className="text-white">{remaining}</span>
-      </p>
-
-      {/* 次の行プレビュー */}
+      {/* 次行 */}
       {next && (
-        <p className="text-lg text-gray-500 mt-2">{next.text}</p>
+        <div className="text-center opacity-50">
+          <p className="text-lg text-gray-400">{next.text}</p>
+          <p className="text-sm font-mono text-gray-500">{next.romaji}</p>
+        </div>
+      )}
+
+      {/* 次の次行 */}
+      {next2 && (
+        <div className="text-center opacity-30">
+          <p className="text-base text-gray-500">{next2.text}</p>
+          <p className="text-xs font-mono text-gray-600">{next2.romaji}</p>
+        </div>
       )}
     </div>
   )
