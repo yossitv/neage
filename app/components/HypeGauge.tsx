@@ -16,11 +16,10 @@ function hypeColor(hype: number): string {
 }
 
 export function HypeGauge({ hype, visible }: Props) {
-  if (!visible) return null
   const pct = hypeToPercent(hype)
 
   return (
-    <div className="w-64">
+    <div className={`w-64 transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
       <div className="flex justify-between text-sm mb-1">
         <span className="text-gray-400">HYPE</span>
         <span className="text-pink-400">x{hype.toFixed(1)}</span>
