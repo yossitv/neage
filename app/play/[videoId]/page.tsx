@@ -11,6 +11,8 @@ import { HypeGauge } from "@/app/components/HypeGauge"
 import { CameraPreview } from "@/app/components/CameraPreview"
 import type { Lyric } from "@/app/types"
 
+type LangOption = { code: string; name: string }
+
 type Props = {
   params: Promise<{ videoId: string }>
 }
@@ -18,20 +20,36 @@ type Props = {
 export default function PlayPage({ params }: Props) {
   const { videoId } = use(params)
   const [speed, setSpeed] = useState(1.0)
+  const [langs, setLangs] = useState<LangOption[]>([])
   const [lyrics, setLyrics] = useState<Lyric[]>([])
-  const [loading, setLoading] = useState(true)
+  const [phase, setPhase] = useState<"loading-langs" | "select-lang" | "loading-captions" | "ready" | "error">("loading-langs")
   const [error, setError] = useState("")
 
-  // Fetch captions from API
+  // 1. Fetch available languages
   useEffect(() => {
     fetch(`/api/captions?v=${videoId}`)
       .then((r) => {
         if (!r.ok) return r.json().then((d) => { throw new Error(d.error) })
         return r.json()
       })
-      .then((data: Lyric[]) => { setLyrics(data); setLoading(false) })
-      .catch((e: Error) => { setError(e.message); setLoading(false) })
+      .then((data: LangOption[]) => {
+        setLangs(data)
+        setPhase("select-lang")
+      })
+      .catch((e: Error) => { setError(e.message); setPhase("error") })
   }, [videoId])
+
+  // 2. Select language → fetch captions
+  const selectLang = (code: string) => {
+    setPhase("loading-captions")
+    fetch(`/api/captions?v=${videoId}&lang=${code}`)
+      .then((r) => {
+        if (!r.ok) return r.json().then((d) => { throw new Error(d.error) })
+        return r.json()
+      })
+      .then((data: Lyric[]) => { setLyrics(data); setPhase("ready") })
+      .catch((e: Error) => { setError(e.message); setPhase("error") })
+  }
 
   // Hype
   const { hype, recover } = useHype()
@@ -92,33 +110,41 @@ export default function PlayPage({ params }: Props) {
 
         {/* Typing Area */}
         <div className="w-full max-w-2xl min-h-[160px] flex items-center justify-center bg-black/50 rounded-lg backdrop-blur-sm p-6">
-          {loading ? (
-            <p className="text-gray-500">Loading captions...</p>
-          ) : error ? (
+          {phase === "loading-langs" ? (
+            <p className="text-gray-500">Loading available languages...</p>
+          ) : phase === "error" ? (
             <div className="text-center">
               <p className="text-red-400 mb-2">{error}</p>
-              <a
-                href="/"
-                className="px-4 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white text-sm"
-              >
+              <a href="/" className="px-4 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white text-sm">
                 Try another video
               </a>
             </div>
+          ) : phase === "select-lang" ? (
+            <div className="text-center">
+              <p className="text-gray-400 mb-4">Select subtitle language</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                {langs.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => selectLang(l.code)}
+                    className="px-5 py-3 bg-pink-600 hover:bg-pink-500 rounded-lg text-white font-bold"
+                  >
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : phase === "loading-captions" ? (
+            <p className="text-gray-500">Loading captions...</p>
           ) : ended ? (
             <div className="text-center">
               <p className="text-4xl text-green-400 mb-4">Complete!</p>
               <p className="text-xl text-white">Final Score: {score}</p>
               <p className="text-gray-400 mb-4">
                 Accuracy:{" "}
-                {totalCount > 0
-                  ? Math.round((correctCount / totalCount) * 100)
-                  : 100}
-                %
+                {totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 100}%
               </p>
-              <a
-                href="/"
-                className="px-6 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white"
-              >
+              <a href="/" className="px-6 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white">
                 Play another song
               </a>
             </div>
@@ -134,11 +160,7 @@ export default function PlayPage({ params }: Props) {
           ) : isInGap ? (
             <p className="text-gray-500 text-2xl animate-pulse">...</p>
           ) : (
-            <TypingDisplay
-              lyrics={lyrics}
-              currentIndex={currentIndex}
-              charIndex={charIndex}
-            />
+            <TypingDisplay lyrics={lyrics} currentIndex={currentIndex} charIndex={charIndex} />
           )}
         </div>
 
@@ -162,8 +184,7 @@ export default function PlayPage({ params }: Props) {
 
         {/* Debug */}
         <p className="text-gray-500 text-xs">
-          {currentTime.toFixed(1)}s | Line {currentIndex + 1}/
-          {lyrics.length}
+          {currentTime.toFixed(1)}s | Line {currentIndex + 1}/{lyrics.length}
         </p>
       </main>
     </>

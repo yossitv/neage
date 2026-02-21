@@ -10,120 +10,125 @@ import type { Lyric } from "@/app/types"
 const execFileAsync = promisify(execFile)
 const CACHE_DIR = join(process.cwd(), ".cache", "captions")
 
+type CaptionTrack = {
+  languageCode: string
+  name: string
+  baseUrl: string
+  kind?: string
+}
+
+// GET /api/captions?v={videoId}          → returns available languages
+// GET /api/captions?v={videoId}&lang=ja  → returns Lyric[] for that language
 export async function GET(req: NextRequest) {
   const videoId = req.nextUrl.searchParams.get("v")
   if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
     return NextResponse.json({ error: "Invalid video ID" }, { status: 400 })
   }
 
-  // Check cache first
-  const cached = await loadCache(videoId)
+  const lang = req.nextUrl.searchParams.get("lang")
+
+  // No lang → return available languages
+  if (!lang) {
+    const tracks = await getTrackList(videoId)
+    if (!tracks || tracks.length === 0) {
+      return NextResponse.json(
+        { error: "No captions found for this video" },
+        { status: 404 }
+      )
+    }
+    return NextResponse.json(
+      tracks.map((t) => ({ code: t.languageCode, name: t.name }))
+    )
+  }
+
+  // With lang → return Lyric[]
+  const cacheKey = `${videoId}_${lang}`
+  const cached = await loadCache(cacheKey)
   if (cached) return NextResponse.json(cached)
 
-  const captions = await fetchCaptions(videoId)
+  const captions = await fetchCaptions(videoId, lang)
   if (!captions) {
     return NextResponse.json(
-      { error: "No captions found for this video" },
+      { error: "No captions found for this language" },
       { status: 404 }
     )
   }
 
-  // Try Gemini first, fallback to local processing
   const apiKey = process.env.GEMINI_API_KEY
   let lyrics: Lyric[] | null = null
-
-  if (apiKey) {
-    lyrics = await parseWithGemini(apiKey, captions)
-  }
+  if (apiKey) lyrics = await parseWithGemini(apiKey, captions)
+  if (!lyrics) lyrics = parseLocally(captions)
   if (!lyrics) {
-    console.log("Using local caption processing (Gemini unavailable)")
-    lyrics = parseLocally(captions)
-  }
-  if (!lyrics) {
-    return NextResponse.json(
-      { error: "Failed to parse captions" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to parse captions" }, { status: 500 })
   }
 
-  // Save to cache
-  await saveCache(videoId, lyrics)
-
+  await saveCache(cacheKey, lyrics)
   return NextResponse.json(lyrics)
 }
 
-// --- Cache ---
+// --- Track List ---
 
-async function loadCache(videoId: string): Promise<Lyric[] | null> {
+async function getTrackList(videoId: string): Promise<CaptionTrack[] | null> {
   try {
-    const data = await readFile(join(CACHE_DIR, `${videoId}.json`), "utf-8")
-    return JSON.parse(data) as Lyric[]
+    const data = await fetchPlayerData(videoId)
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
+    if (!tracks || tracks.length === 0) return null
+    return tracks.map((t: { languageCode: string; name?: { simpleText?: string }; baseUrl: string; kind?: string }) => ({
+      languageCode: t.languageCode,
+      name: t.name?.simpleText ?? t.languageCode,
+      baseUrl: t.baseUrl,
+      kind: t.kind,
+    }))
   } catch {
     return null
   }
 }
 
-async function saveCache(videoId: string, lyrics: Lyric[]): Promise<void> {
-  try {
-    await mkdir(CACHE_DIR, { recursive: true })
-    await writeFile(
-      join(CACHE_DIR, `${videoId}.json`),
-      JSON.stringify(lyrics, null, 2)
-    )
-  } catch (e) {
-    console.error("cache write error:", e)
-  }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchPlayerData(videoId: string): Promise<any> {
+  const res = await fetch(
+    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        videoId,
+        context: {
+          client: {
+            clientName: "ANDROID",
+            clientVersion: "19.09.37",
+            androidSdkVersion: 30,
+            hl: "en",
+          },
+        },
+      }),
+    }
+  )
+  return res.json()
 }
 
-// --- Caption Fetch ---
+// --- Caption Fetch (with lang) ---
 
 type RawCaption = { start: number; dur: number; text: string }
 
-async function fetchCaptions(videoId: string): Promise<RawCaption[] | null> {
-  // Strategy 1: innertube ANDROID API
-  const innertube = await fetchViaInnertube(videoId)
+async function fetchCaptions(videoId: string, lang: string): Promise<RawCaption[] | null> {
+  const innertube = await fetchViaInnertube(videoId, lang)
   if (innertube) return innertube
-
-  // Strategy 2: yt-dlp subprocess fallback
-  return fetchViaYtDlp(videoId)
+  return fetchViaYtDlp(videoId, lang)
 }
 
-async function fetchViaInnertube(videoId: string): Promise<RawCaption[] | null> {
+async function fetchViaInnertube(videoId: string, lang: string): Promise<RawCaption[] | null> {
   try {
-    const res = await fetch(
-      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoId,
-          context: {
-            client: {
-              clientName: "ANDROID",
-              clientVersion: "19.09.37",
-              androidSdkVersion: 30,
-              hl: "en",
-            },
-          },
-        }),
-      }
-    )
-    const data = await res.json()
-    const tracks =
-      data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
+    const data = await fetchPlayerData(videoId)
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
     if (!tracks || tracks.length === 0) return null
 
-    const track =
-      tracks.find((t: { languageCode: string }) => t.languageCode === "en") ??
-      tracks.find((t: { languageCode: string }) => t.languageCode === "ja") ??
-      tracks[0]
+    const track = tracks.find((t: { languageCode: string }) => t.languageCode === lang)
+    if (!track) return null
 
-    // Auto-generated subs return format 3 by default
     const capRes = await fetch(track.baseUrl)
     const xml = await capRes.text()
     if (!xml || xml.length === 0) return null
-
-    // Try format 3 first (<p t="ms" d="ms">), then srv1 (<text start="" dur="">)
     return parseFormat3Xml(xml) ?? parseSrv1Xml(xml)
   } catch (e) {
     console.error("innertube error:", e)
@@ -131,37 +136,51 @@ async function fetchViaInnertube(videoId: string): Promise<RawCaption[] | null> 
   }
 }
 
-async function fetchViaYtDlp(videoId: string): Promise<RawCaption[] | null> {
-  const outPath = join(tmpdir(), `neage-${videoId}`)
+async function fetchViaYtDlp(videoId: string, lang: string): Promise<RawCaption[] | null> {
+  const outPath = join(tmpdir(), `neage-${videoId}-${lang}`)
   try {
     await execFileAsync("yt-dlp", [
       "--write-auto-sub",
-      "--sub-lang", "ja,en",
+      "--sub-lang", lang,
       "--sub-format", "srv1",
       "--skip-download",
       "-o", outPath,
       `https://www.youtube.com/watch?v=${videoId}`,
     ], { timeout: 30000 })
 
-    for (const lang of ["ja", "en"]) {
-      const file = `${outPath}.${lang}.srv1`
-      try {
-        const xml = await readFile(file, "utf-8")
-        await unlink(file).catch(() => {})
-        const parsed = parseSrv1Xml(xml)
-        if (parsed) return parsed
-      } catch {
-        // file doesn't exist
-      }
+    const file = `${outPath}.${lang}.srv1`
+    try {
+      const xml = await readFile(file, "utf-8")
+      await unlink(file).catch(() => {})
+      return parseSrv1Xml(xml)
+    } catch {
+      return null
     }
-    return null
   } catch (e) {
     console.error("yt-dlp error:", e)
     return null
   } finally {
-    for (const lang of ["ja", "en"]) {
-      await unlink(`${outPath}.${lang}.srv1`).catch(() => {})
-    }
+    await unlink(`${outPath}.${lang}.srv1`).catch(() => {})
+  }
+}
+
+// --- Cache ---
+
+async function loadCache(key: string): Promise<Lyric[] | null> {
+  try {
+    const data = await readFile(join(CACHE_DIR, `${key}.json`), "utf-8")
+    return JSON.parse(data) as Lyric[]
+  } catch {
+    return null
+  }
+}
+
+async function saveCache(key: string, lyrics: Lyric[]): Promise<void> {
+  try {
+    await mkdir(CACHE_DIR, { recursive: true })
+    await writeFile(join(CACHE_DIR, `${key}.json`), JSON.stringify(lyrics, null, 2))
+  } catch (e) {
+    console.error("cache write error:", e)
   }
 }
 
@@ -185,11 +204,7 @@ function parseFormat3Xml(xml: string): RawCaption[] | null {
   while ((m = regex.exec(xml)) !== null) {
     const text = decodeXml(m[3])
     if (text) {
-      entries.push({
-        start: parseInt(m[1]) / 1000,
-        dur: parseInt(m[2]) / 1000,
-        text,
-      })
+      entries.push({ start: parseInt(m[1]) / 1000, dur: parseInt(m[2]) / 1000, text })
     }
   }
   return entries.length > 0 ? entries : null
@@ -217,19 +232,13 @@ function parseLocally(captions: RawCaption[]): Lyric[] | null {
   for (const c of captions) {
     const text = c.text.trim()
     if (!text || NOISE.test(text)) continue
-    // Lowercase + strip non-typing chars for romaji
     const romaji = text
       .toLowerCase()
       .replace(/[^a-z0-9\s',.-]/g, "")
       .replace(/\s+/g, " ")
       .trim()
     if (!romaji) continue
-    lyrics.push({
-      text,
-      romaji,
-      startTime: c.start,
-      endTime: c.start + c.dur,
-    })
+    lyrics.push({ text, romaji, startTime: c.start, endTime: c.start + c.dur })
   }
   return lyrics.length > 0 ? lyrics : null
 }
