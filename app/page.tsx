@@ -1,55 +1,64 @@
 "use client"
 
 import { useState } from "react"
-import { useTypingEngine } from "@/hooks/useTypingEngine"
-import { TypingDisplay } from "@/app/components/TypingDisplay"
-import { ScoreDisplay } from "@/app/components/ScoreDisplay"
-import { MOCK_LYRICS } from "@/app/mock"
+import { useRouter } from "next/navigation"
+
+function extractVideoId(input: string): string | null {
+  // youtu.be/ID
+  const short = input.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/)
+  if (short) return short[1]
+  // youtube.com/watch?v=ID
+  const long = input.match(/[?&]v=([a-zA-Z0-9_-]{11})/)
+  if (long) return long[1]
+  // bare ID (11 chars)
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) return input.trim()
+  return null
+}
 
 export default function Home() {
-  const [hype] = useState(1.0)
-  const { currentIndex, charIndex, score, correctCount, totalCount } =
-    useTypingEngine(MOCK_LYRICS, hype)
+  const [url, setUrl] = useState("")
+  const [error, setError] = useState("")
+  const router = useRouter()
 
-  const lastLyric = MOCK_LYRICS[MOCK_LYRICS.length - 1]
-  const isFinished =
-    currentIndex >= MOCK_LYRICS.length - 1 &&
-    charIndex >= (lastLyric?.romaji.length ?? 0)
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const id = extractVideoId(url)
+    if (!id) {
+      setError("Invalid YouTube URL")
+      return
+    }
+    router.push(`/play/${id}`)
+  }
 
   return (
     <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center gap-8 p-8">
-      <h1 className="text-3xl font-bold">音上げ - Typing Engine Demo</h1>
-
-      <ScoreDisplay
-        score={score}
-        correctCount={correctCount}
-        totalCount={totalCount}
-        hype={hype}
-      />
-
-      {isFinished ? (
-        <div className="text-center">
-          <p className="text-4xl text-green-400 mb-4">Complete!</p>
-          <p className="text-xl">Final Score: {score}</p>
-          <p className="text-gray-400">
-            Accuracy:{" "}
-            {totalCount > 0
-              ? Math.round((correctCount / totalCount) * 100)
-              : 100}
-            %
-          </p>
-        </div>
-      ) : (
-        <TypingDisplay
-          lyrics={MOCK_LYRICS}
-          currentIndex={currentIndex}
-          charIndex={charIndex}
-        />
-      )}
-
-      <p className="text-gray-500 text-sm mt-8">
-        Type the romaji to match the lyrics above
+      <h1 className="text-4xl font-bold">
+        <span className="text-pink-500">音上げ</span> NeAge
+      </h1>
+      <p className="text-gray-400 text-center max-w-md">
+        Lyrics Typing x Hand Gesture Action Game
       </p>
+
+      <form onSubmit={handleSubmit} className="w-full max-w-lg flex flex-col gap-4">
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => { setUrl(e.target.value); setError("") }}
+          placeholder="YouTube URL or Video ID"
+          className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-pink-500"
+        />
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <button
+          type="submit"
+          className="px-6 py-3 bg-pink-600 hover:bg-pink-500 rounded-lg font-bold text-lg"
+        >
+          Play
+        </button>
+      </form>
+
+      <div className="text-gray-500 text-sm text-center mt-4">
+        <p>Paste a YouTube URL with subtitles to start typing along</p>
+      </div>
     </main>
   )
 }

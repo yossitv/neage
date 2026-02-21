@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useCallback, useState } from "react"
+import { use, useCallback, useEffect, useState } from "react"
 import { useYouTubePlayer } from "@/hooks/useYouTubePlayer"
 import { useTypingEngine } from "@/hooks/useTypingEngine"
 import { useHype } from "@/hooks/useHype"
@@ -9,7 +9,7 @@ import { TypingDisplay } from "@/app/components/TypingDisplay"
 import { ScoreDisplay } from "@/app/components/ScoreDisplay"
 import { HypeGauge } from "@/app/components/HypeGauge"
 import { CameraPreview } from "@/app/components/CameraPreview"
-import { MOCK_LYRICS } from "@/app/mock"
+import type { Lyric } from "@/app/types"
 
 type Props = {
   params: Promise<{ videoId: string }>
@@ -18,6 +18,20 @@ type Props = {
 export default function PlayPage({ params }: Props) {
   const { videoId } = use(params)
   const [speed, setSpeed] = useState(1.0)
+  const [lyrics, setLyrics] = useState<Lyric[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  // Fetch captions from API
+  useEffect(() => {
+    fetch(`/api/captions?v=${videoId}`)
+      .then((r) => {
+        if (!r.ok) return r.json().then((d) => { throw new Error(d.error) })
+        return r.json()
+      })
+      .then((data: Lyric[]) => { setLyrics(data); setLoading(false) })
+      .catch((e: Error) => { setError(e.message); setLoading(false) })
+  }, [videoId])
 
   // Hype
   const { hype, recover } = useHype()
@@ -26,11 +40,11 @@ export default function PlayPage({ params }: Props) {
   const { ready, playing, currentTime, ended, play, setPlaybackRate } =
     useYouTubePlayer(videoId, "yt-player")
 
-  // Typing Engine（再生時間連動 + Hype倍率）
+  // Typing Engine
   const { currentIndex, charIndex, score, correctCount, totalCount, passCurrentWord } =
-    useTypingEngine(MOCK_LYRICS, hype, playing ? currentTime : undefined)
+    useTypingEngine(lyrics, hype, playing ? currentTime : undefined)
 
-  // Gesture → 手上げで Hype回復 + 単語pass
+  // Gesture -> Hype recovery + word pass
   const handlePass = useCallback(() => {
     recover()
     passCurrentWord()
@@ -39,8 +53,8 @@ export default function PlayPage({ params }: Props) {
   const { gesture, status, setVideoElement, setCanvasElement } =
     useGesture(handlePass)
 
-  // 現在時間に該当する歌詞がない場合
-  const currentLyric = MOCK_LYRICS[currentIndex]
+  // Gap detection
+  const currentLyric = lyrics[currentIndex]
   const isInGap =
     currentLyric &&
     (currentTime < currentLyric.startTime || currentTime >= currentLyric.endTime)
@@ -52,7 +66,6 @@ export default function PlayPage({ params }: Props) {
 
   return (
     <>
-      {/* 背景: カメラボーンモーション */}
       <CameraPreview
         status={status}
         isRaised={gesture.isRaised}
@@ -60,7 +73,6 @@ export default function PlayPage({ params }: Props) {
         setCanvasElement={setCanvasElement}
       />
 
-      {/* UI オーバーレイ */}
       <main className="relative z-10 min-h-screen flex flex-col items-center gap-6 p-6">
         {/* YouTube Player */}
         <div className="w-full max-w-2xl aspect-video bg-black/80 rounded-lg overflow-hidden backdrop-blur-sm">
@@ -80,7 +92,19 @@ export default function PlayPage({ params }: Props) {
 
         {/* Typing Area */}
         <div className="w-full max-w-2xl min-h-[160px] flex items-center justify-center bg-black/50 rounded-lg backdrop-blur-sm p-6">
-          {ended ? (
+          {loading ? (
+            <p className="text-gray-500">Loading captions...</p>
+          ) : error ? (
+            <div className="text-center">
+              <p className="text-red-400 mb-2">{error}</p>
+              <a
+                href="/"
+                className="px-4 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white text-sm"
+              >
+                Try another video
+              </a>
+            </div>
+          ) : ended ? (
             <div className="text-center">
               <p className="text-4xl text-green-400 mb-4">Complete!</p>
               <p className="text-xl text-white">Final Score: {score}</p>
@@ -92,7 +116,7 @@ export default function PlayPage({ params }: Props) {
                 %
               </p>
               <a
-                href="/play"
+                href="/"
                 className="px-6 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white"
               >
                 Play another song
@@ -111,7 +135,7 @@ export default function PlayPage({ params }: Props) {
             <p className="text-gray-500 text-2xl animate-pulse">...</p>
           ) : (
             <TypingDisplay
-              lyrics={MOCK_LYRICS}
+              lyrics={lyrics}
               currentIndex={currentIndex}
               charIndex={charIndex}
             />
@@ -139,7 +163,7 @@ export default function PlayPage({ params }: Props) {
         {/* Debug */}
         <p className="text-gray-500 text-xs">
           {currentTime.toFixed(1)}s | Line {currentIndex + 1}/
-          {MOCK_LYRICS.length}
+          {lyrics.length}
         </p>
       </main>
     </>
