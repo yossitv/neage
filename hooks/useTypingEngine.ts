@@ -112,22 +112,23 @@ export function useTypingEngine(
     })
   }, [lyrics, skipSpaces])
 
-  // Current line is "active" (typeable) when currentTime >= startTime
+  // Current line is "active" (typeable) 0.1s before startTime
   const currentLyric = lyrics[state.currentIndex]
+  const ACTIVE_OFFSET = 0.1
   const active =
     currentTime !== undefined && currentLyric
-      ? currentTime >= currentLyric.startTime
+      ? currentTime >= currentLyric.startTime - ACTIVE_OFFSET
       : true
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return
 
-      // Block input if current line hasn't started yet
+      // Block input if current line hasn't started yet (with 0.1s offset)
       const ct = currentTimeRef.current
       const s = stateRef.current
       const lyric = lyrics[s.currentIndex]
-      if (ct !== undefined && lyric && ct < lyric.startTime) return
+      if (ct !== undefined && lyric && ct < lyric.startTime - ACTIVE_OFFSET) return
 
       setState((s) => {
         const romaji = lyrics[s.currentIndex]?.romaji
