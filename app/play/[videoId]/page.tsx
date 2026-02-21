@@ -15,10 +15,14 @@ export default function PlayPage({ params }: Props) {
   const { videoId } = use(params)
   const [hype] = useState(1.0) // TODO: useHype() に差し替え
 
-  const { ready, playing, currentTime, ended, play } = useYouTubePlayer(
-    videoId,
-    "yt-player"
-  )
+  const [speed, setSpeed] = useState(1.0)
+  const { ready, playing, currentTime, ended, play, setPlaybackRate } =
+    useYouTubePlayer(videoId, "yt-player")
+
+  const changeSpeed = (rate: number) => {
+    setSpeed(rate)
+    setPlaybackRate(rate)
+  }
 
   const { currentIndex, charIndex, score, correctCount, totalCount } =
     useTypingEngine(MOCK_LYRICS, hype, playing ? currentTime : undefined)
@@ -82,6 +86,24 @@ export default function PlayPage({ params }: Props) {
             charIndex={charIndex}
           />
         )}
+      </div>
+
+      {/* Speed Controls */}
+      <div className="flex items-center gap-2">
+        <span className="text-gray-400 text-sm">Speed:</span>
+        {[0.25, 0.5, 0.75, 1.0].map((rate) => (
+          <button
+            key={rate}
+            onClick={() => changeSpeed(rate)}
+            className={`px-3 py-1 rounded text-sm ${
+              speed === rate
+                ? "bg-pink-600 text-white"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            }`}
+          >
+            {rate === 1.0 ? "1x" : `${rate}x`}
+          </button>
+        ))}
       </div>
 
       {/* Current Time Debug */}

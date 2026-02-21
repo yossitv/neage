@@ -91,6 +91,9 @@ export function useYouTubePlayer(videoId: string, containerId: string) {
 
   const play = useCallback(() => playerRef.current?.playVideo(), [])
   const pause = useCallback(() => playerRef.current?.pauseVideo(), [])
+  const setPlaybackRate = useCallback((rate: number) => {
+    playerRef.current?.setPlaybackRate(rate)
+  }, [])
 
-  return { ...state, play, pause }
+  return { ...state, play, pause, setPlaybackRate }
 }
